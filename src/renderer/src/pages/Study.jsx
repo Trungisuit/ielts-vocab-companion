@@ -8,11 +8,26 @@ export default function Study({ onDone }) {
   const [doneCount, setDoneCount] = useState(0);
   const [mode, setMode] = useState('flip');
 
+  const [checking, setChecking] = useState(false);
+
   const load = async () => {
+    setChecking(true);
     const cards = await window.api.getDueCards(60);
     setQueue(cards);
     setTotal(cards.length);
     setDoneCount(0);
+    setChecking(false);
+  };
+
+  // Hoc them tu moi ngay lap tuc (bo qua gioi han moi ngay)
+  const learnMore = async () => {
+    setChecking(true);
+    const cards = await window.api.learnMore(10);
+    setQueue(cards);
+    setTotal(cards.length);
+    setDoneCount(0);
+    setChecking(false);
+    onDone && onDone();
   };
 
   useEffect(() => { load(); }, []);
@@ -41,9 +56,16 @@ export default function Study({ onDone }) {
           <div className="big">🎉</div>
           <h2>Tuyệt vời! Bạn đã ôn hết thẻ đến hạn</h2>
           <p className="sub">
-            Từ mới sẽ được mở khóa vào ngày mai, hoặc quay lại sau khi có thẻ đến hạn ôn.
+            Bạn có thể học thêm từ mới ngay bây giờ, hoặc kiểm tra lại xem có thẻ nào vừa đến hạn ôn không.
           </p>
-          <button className="btn primary" onClick={load}>Kiểm tra lại</button>
+          <div className="rating-row" style={{ justifyContent: 'center', gap: 12 }}>
+            <button className="btn primary" disabled={checking} onClick={learnMore}>
+              ➕ Học thêm 10 từ mới
+            </button>
+            <button className="btn" disabled={checking} onClick={load}>
+              🔄 Kiểm tra lại
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -12,7 +12,8 @@ let showPopupFn = null;
 let updateTrayFn = null;
 
 const TICK_MS = 30000;
-const FIRST_POPUP_DELAY_MS = 60000; // sau khi mo app 1 phut moi bat dau nhac
+const FIRST_POPUP_DELAY_MS = 60000; // sau khi mo app 1 phut moi bat dau chu ky nhac dinh ky
+const OPEN_POPUP_DELAY_MS = 6000;   // moi lan mo app -> nhac sau 6 giay
 let startedAt = 0;
 
 function isQuietHours(settings) {
@@ -61,6 +62,30 @@ function start({ showPopup, updateTray }) {
   db.introduceNewCards();
   if (updateTrayFn) updateTrayFn(db.countDue());
   timer = setInterval(() => tick(false), TICK_MS);
+  reviewOnOpen();
+}
+
+/**
+ * Nhac ngay khi mo app: sau vai giay hien popup mot the de on.
+ * Luon dam bao co the (mo khoa them tu moi neu can) — khong bi gioi han
+ * "10 tu/ngay". Ton trong che do Do Not Disturb, bo qua gioi han tan suat.
+ */
+function reviewOnOpen() {
+  setTimeout(() => {
+    try {
+      const settings = db.getAllSettings();
+      if (settings.dnd) return; // dang bat "Khong lam phien" thi thoi
+      db.ensureReviewAvailable();
+      const cards = db.getDueCards(1);
+      if (updateTrayFn) updateTrayFn(db.countDue());
+      if (cards.length && showPopupFn) {
+        lastPopupAt = Date.now();
+        showPopupFn(cards[0]);
+      }
+    } catch (err) {
+      console.error('reviewOnOpen error:', err);
+    }
+  }, OPEN_POPUP_DELAY_MS);
 }
 
 function stop() {
@@ -82,4 +107,4 @@ function popupClosed() {
   lastPopupAt = Date.now();
 }
 
-module.exports = { start, stop, forceReview, snooze, popupClosed };
+module.exports = { start, stop, forceReview, snooze, popupClosed, reviewOnOpen };

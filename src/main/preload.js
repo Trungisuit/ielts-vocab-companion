@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
   getDueCards: (limit) => ipcRenderer.invoke('study:due', limit),
   rateCard: (id, rating) => ipcRenderer.invoke('cards:rate', id, rating),
   getDistractors: (cardId, n) => ipcRenderer.invoke('study:distractors', cardId, n),
+  learnMore: (n) => ipcRenderer.invoke('study:learnMore', n),
 
   /* Media */
   getImage: (cardId) => ipcRenderer.invoke('media:image', cardId),

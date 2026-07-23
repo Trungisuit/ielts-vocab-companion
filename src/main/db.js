@@ -222,6 +222,38 @@ function introduceNewCards() {
   return rows.length;
 }
 
+/**
+ * Mo khoa THEM tu moi ngay lap tuc, BO QUA gioi han newPerDay
+ * (dung khi nguoi dung chu dong bam "Hoc them tu moi" hoac khi mo app
+ *  ma khong con the den han). Tra ve so the vua mo khoa.
+ */
+function introduceMoreCards(n = 10) {
+  const now = Date.now();
+  const rows = db.prepare(
+    "SELECT id FROM cards WHERE state = 'new' ORDER BY sort_order ASC LIMIT ?"
+  ).all(n);
+  const upd = db.prepare(
+    "UPDATE cards SET state = 'learning', due_at = ?, introduced_at = ? WHERE id = ?"
+  );
+  for (const r of rows) upd.run(now, now, r.id);
+  return rows.length;
+}
+
+/**
+ * Dam bao luon co the de on khi mo app:
+ * - Mo khoa batch tu moi trong ngay (theo newPerDay) nhu binh thuong.
+ * - Neu van khong co the nao den han (da het batch hom nay) thi mo khoa
+ *   them 1 batch nua de nguoi dung khong bao gio bi "het thE". 
+ * Tra ve so the dang den han sau khi xu ly.
+ */
+function ensureReviewAvailable() {
+  introduceNewCards();
+  if (countDue() > 0) return countDue();
+  const settings = getAllSettings();
+  introduceMoreCards(settings.newPerDay || 10);
+  return countDue();
+}
+
 function updateCardSrs(id, { state, ease, interval_days, reps, lapses, due_at }) {
   db.prepare(`
     UPDATE cards SET state = ?, ease = ?, interval_days = ?, reps = ?, lapses = ?, due_at = ?
@@ -381,7 +413,7 @@ function getStats() {
 module.exports = {
   init, todayStr,
   getSetting, getAllSettings, setSetting, setSettings,
-  getCard, getDueCards, countDue, introduceNewCards,
+  getCard, getDueCards, countDue, introduceNewCards, introduceMoreCards, ensureReviewAvailable,
   updateCardSrs, addReview, postponeCard,
   listCards, listTopics, addCard, updateCard, deleteCard, toggleStar, getDistractors,
   setCardMedia, getStats, getDataDir

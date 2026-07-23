@@ -39,6 +39,13 @@ module.exports = function registerIpc(actions) {
     return result;
   });
   ipcMain.handle('study:distractors', (e, cardId, n) => db.getDistractors(cardId, n || 3));
+  // Hoc them tu moi ngay lap tuc, bo qua gioi han newPerDay
+  ipcMain.handle('study:learnMore', (e, n) => {
+    db.introduceMoreCards(n || 10);
+    actions.updateTray(db.countDue());
+    const cards = db.getDueCards(200);
+    return cards.map((c) => ({ ...c, preview: srs.previewIntervals(c) }));
+  });
 
   /* ----- Media ----- */
   ipcMain.handle('media:image', async (e, cardId) => {

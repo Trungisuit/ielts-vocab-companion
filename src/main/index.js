@@ -182,7 +182,11 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => showMainWindow());
+  // Mo lai file .exe khi app da chay -> hien cua so va nhac on luon
+  app.on('second-instance', () => {
+    showMainWindow();
+    scheduler.reviewOnOpen();
+  });
 
   app.whenReady().then(() => {
     db.init();
