@@ -1,0 +1,49 @@
+{
+  "name": "ielts-vocab-companion",
+  "productName": "IELTS Vocab",
+  "version": "1.0.0",
+  "description": "Ung dung hoc tu vung IELTS voi spaced repetition, chay local tren Windows",
+  "main": "src/main/index.js",
+  "author": "Vibe",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "build:renderer": "vite build",
+    "build": "vite build && electron-builder --win portable",
+    "icon": "node scripts/make-icon.js"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^37.2.0",
+    "electron-builder": "^25.1.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.3.5"
+  },
+  "build": {
+    "appId": "com.vibe.ieltsvocab",
+    "productName": "IELTS Vocab",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "src/main/**",
+      "data/seed/**",
+      "build/tray.png",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": ["portable"],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "IELTS-Vocab.exe"
+    }
+  }
+}
