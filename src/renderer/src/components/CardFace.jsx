@@ -1,5 +1,5 @@
 import React from 'react';
-import { playAudio, useCardImage, topicLabel, highlightWord } from '../lib.js';
+import { playAudio, playSentence, useCardImage, topicLabel, highlightWord } from '../lib.js';
 
 /** Mat truoc cua the: tu + IPA + anh */
 export function CardFront({ card, showImage = true }) {
@@ -17,19 +17,28 @@ export function CardFront({ card, showImage = true }) {
   );
 }
 
-/** Mat sau cua the: nghia + dinh nghia + vi du + collocations + synonyms */
-export function CardBack({ card, compact = false }) {
+/** Mat sau cua the: nghia + dinh nghia + anh + vi du + collocations + synonyms */
+export function CardBack({ card, compact = false, showImage = false }) {
+  const img = useCardImage(showImage ? card.id : null);
   const exParts = highlightWord(card.example, card.word);
   return (
     <>
       <div className="vn-big">{card.vn}</div>
       {card.def && <div className="def-text">{card.def}</div>}
+      {showImage && img && <img className="card-img" src={img} alt="" />}
       {card.example && (
         <div className="example-box">
           <div className="en">
             {Array.isArray(exParts)
               ? exParts.map((p, i) => (i % 2 === 1 ? <b key={i}>{p}</b> : p))
               : exParts}
+            <button
+              className="audio-btn sentence"
+              title="Đọc câu ví dụ"
+              onClick={() => playSentence(card.example)}
+            >
+              🔊
+            </button>
           </div>
           {card.example_vn && <div className="vi">{card.example_vn}</div>}
         </div>

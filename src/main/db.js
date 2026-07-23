@@ -76,6 +76,7 @@ function init() {
     CREATE INDEX IF NOT EXISTS idx_reviews_time ON reviews(reviewed_at);
   `);
   seedIfEmpty();
+  syncNewSeeds(); // nap them the moi tu seed vao DB da ton tai (khong xoa tien do)
   // set ngay bat dau hoc lan dau tien
   if (!getSetting('startDate')) {
     setSetting('startDate', todayStr());
@@ -138,6 +139,61 @@ function seedIfEmpty() {
     throw err;
   }
   console.log(`Seeded ${entries.length} cards`);
+}
+
+/**
+ * Nap them the moi tu file seed vao DB da ton tai (vd bo cum tu moi bo sung),
+ * KHONG dung neu DB dang rong (seedIfEmpty lo phan do) va KHONG xoa/ghi de the cu.
+ * The moi them vao cuoi (state='new') nen se duoc mo khoa dan, giu nguyen tien do.
+ */
+function syncNewSeeds() {
+  const seedDir = path.join(__dirname, '..', '..', 'data', 'seed');
+  if (!fs.existsSync(seedDir)) return;
+  const count = db.prepare('SELECT COUNT(*) AS n FROM cards').get().n;
+  if (count === 0) return; // DB rong -> seedIfEmpty da xu ly
+  const existing = new Set(
+    db.prepare('SELECT LOWER(TRIM(word)) AS w FROM cards').all().map((r) => r.w)
+  );
+  let order = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM cards').get().m;
+  const insert = db.prepare(`
+    INSERT INTO cards (word, pos, ipa, cefr, vn, def, example, example_vn,
+      collocations, synonyms, topic, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const files = fs.readdirSync(seedDir).filter((f) => f.endsWith('.json'));
+  let added = 0;
+  db.exec('BEGIN');
+  try {
+    for (const f of files) {
+      let data;
+      try {
+        data = JSON.parse(fs.readFileSync(path.join(seedDir, f), 'utf8'));
+      } catch (err) {
+        console.error('Seed file error', f, err.message);
+        continue;
+      }
+      const topic = data.topic || f.replace('.json', '');
+      for (const e of data.cards || []) {
+        const w = (e.w || '').toLowerCase().trim();
+        if (!w || existing.has(w)) continue;
+        order += 1;
+        insert.run(
+          e.w || '', e.pos || '', e.ipa || '', e.cefr || '',
+          e.vn || '', e.def || '', e.ex || '', e.exVn || '',
+          JSON.stringify(e.coll || []), JSON.stringify(e.syn || []),
+          topic, order
+        );
+        existing.add(w);
+        added += 1;
+      }
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    console.error('syncNewSeeds error', err.message);
+    return;
+  }
+  if (added) console.log(`Synced ${added} new cards from seed`);
 }
 
 /* ---------- Settings ---------- */

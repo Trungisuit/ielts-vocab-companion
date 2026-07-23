@@ -19,6 +19,20 @@ export async function playAudio(card) {
   } catch {}
 }
 
+/** Doc to mot doan van ban (cau vi du) bang giong doc he thong (Windows) */
+export function playSentence(text) {
+  if (!text) return;
+  try {
+    const clean = String(text).replace(/\s+/g, ' ').trim();
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = 'en-US';
+    u.rate = 0.92;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
 /** Hook lay anh minh hoa (media:// url) cua the */
 export function useCardImage(cardId) {
   const [src, setSrc] = useState(null);
@@ -54,6 +68,7 @@ export const TOPIC_LABELS = {
   government_politics: 'Chính phủ & Chính sách',
   communication_language: 'Giao tiếp & Ngôn ngữ',
   writing_phrases: 'Cụm từ Writing',
+  common_phrases: 'Cụm từ thông dụng',
   custom: 'Từ của tôi'
 };
 

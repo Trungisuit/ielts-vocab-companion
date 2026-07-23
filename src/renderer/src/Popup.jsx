@@ -109,7 +109,7 @@ export default function Popup() {
             ) : (
               <>
                 <div style={{ fontWeight: 700, fontSize: 17 }}>{card.word}</div>
-                <CardBack card={card} />
+                <CardBack card={card} showImage />
               </>
             )}
             {!flipped && (

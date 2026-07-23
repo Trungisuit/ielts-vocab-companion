@@ -183,6 +183,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
   border: 1px solid var(--border); margin-left: 8px; vertical-align: middle;
 }
 .audio-btn:hover { border-color: var(--accent); }
+.audio-btn.sentence { font-size: 13px; padding: 1px 7px; margin-left: 6px; }
 
 .progress-line { height: 6px; background: var(--bg3); border-radius: 99px; overflow: hidden; margin-bottom: 18px; }
 .progress-line > div { height: 100%; background: linear-gradient(90deg, #4f46e5, #7c3aed); border-radius: 99px; transition: width 0.3s; }
