@@ -36,14 +36,16 @@ export default function Study({ onDone }) {
 
   const handleRated = useCallback(async (rating) => {
     if (!card) return;
-    await window.api.rateCard(card.id, rating);
+    const res = await window.api.rateCard(card.id, rating);
+    // Neu the van dang trong buoc hoc (Quen/Kho tren tu moi) -> luyen lai
+    // trong cung phien (day xuong cuoi hang doi). Chi tinh "xong" khi tot nghiep.
+    const stillLearning = res && res.state === 'learning';
     setQueue((q) => {
       const rest = q.slice(1);
-      // quen -> hoc lai trong cung phien (day xuong cuoi hang doi)
-      if (rating === 1) return [...rest, { ...card, state: 'learning', reps: 0 }];
+      if (stillLearning) return [...rest, { ...card, state: 'learning', reps: 0 }];
       return rest;
     });
-    if (rating !== 1) setDoneCount((d) => d + 1);
+    if (!stillLearning) setDoneCount((d) => d + 1);
     onDone && onDone();
   }, [card, onDone]);
 

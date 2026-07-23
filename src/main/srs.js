@@ -25,14 +25,19 @@ function rate(cardId, rating) {
     state = 'learning';
     ease = Math.max(MIN_EASE, ease - 0.2);
     interval = 10 / (60 * 24); // 10 phut tinh theo ngay
+  } else if (rating === 2 && (reps === 0 || state === 'learning')) {
+    // Kho tren the moi / dang hoc: GIU trong buoc hoc, hien lai sau ~30 phut
+    // (khong tot nghiep ngay) de nguoi dung duoc luyen lai tu kho trong phien
+    state = 'learning';
+    reps = 0;
+    ease = Math.max(MIN_EASE, ease - 0.15);
+    interval = 30 / (60 * 24); // 30 phut
   } else if (reps === 0 || state === 'learning') {
-    // Lan dau tra loi dung (hoac dang hoc lai)
+    // Nho/De lan dau -> tot nghiep sang review
     state = 'review';
     reps += 1;
-    if (rating === 2) interval = 0.5;      // 12 tieng
-    else if (rating === 3) interval = 1;   // 1 ngay
+    if (rating === 3) interval = 1;        // 1 ngay
     else interval = 4;                     // Easy: 4 ngay
-    if (rating === 2) ease = Math.max(MIN_EASE, ease - 0.15);
     if (rating === 4) ease += 0.15;
   } else {
     // The dang review
@@ -72,7 +77,7 @@ function previewIntervals(card) {
   const preview = {};
   preview[1] = intervalLabel(10 / (60 * 24));
   if (isNew) {
-    preview[2] = intervalLabel(0.5);
+    preview[2] = intervalLabel(30 / (60 * 24)); // 30 phut — giu lai luyen trong phien
     preview[3] = intervalLabel(1);
     preview[4] = intervalLabel(4);
   } else {
