@@ -23,6 +23,13 @@ contextBridge.exposeInMainWorld('api', {
   getDistractors: (cardId, n) => ipcRenderer.invoke('study:distractors', cardId, n),
   learnMore: (n) => ipcRenderer.invoke('study:learnMore', n),
 
+  /* Writing Lab */
+  getWritingStats: () => ipcRenderer.invoke('writing:stats'),
+  getWritingCards: (opts) => ipcRenderer.invoke('writing:cards', opts),
+  learnMoreWriting: (n, fn) => ipcRenderer.invoke('writing:learnMore', n, fn),
+  getWritingFrames: (opts) => ipcRenderer.invoke('writing:frames', opts),
+  getParaphraseBank: (limit) => ipcRenderer.invoke('writing:paraphraseBank', limit),
+
   /* Media */
   getImage: (cardId) => ipcRenderer.invoke('media:image', cardId),
   getAudio: (cardId) => ipcRenderer.invoke('media:audio', cardId),

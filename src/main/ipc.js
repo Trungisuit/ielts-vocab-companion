@@ -84,4 +84,31 @@ module.exports = function registerIpc(actions) {
 
   /* ----- App ----- */
   ipcMain.handle('app:openMain', (e, page) => actions.showMainWindow(page));
+
+  /* ----- Writing Lab ----- */
+  ipcMain.handle('writing:stats', () => db.getWritingStats());
+  ipcMain.handle('writing:cards', (e, opts) => {
+    const o = opts || {};
+    // dam bao co the de hoc: mo khoa them neu thieu
+    let cards = db.listWritingCards({
+      function: o.function || null,
+      limit: o.limit || 40,
+      dueOnly: !!o.dueOnly
+    });
+    if (cards.length < 5) {
+      db.introduceWritingCards(10, o.function || null);
+      cards = db.listWritingCards({
+        function: o.function || null,
+        limit: o.limit || 40
+      });
+    }
+    return cards.map((c) => ({ ...c, preview: srs.previewIntervals(c) }));
+  });
+  ipcMain.handle('writing:learnMore', (e, n, fn) => {
+    db.introduceWritingCards(n || 10, fn || null);
+    const cards = db.listWritingCards({ function: fn || null, limit: 40 });
+    return cards.map((c) => ({ ...c, preview: srs.previewIntervals(c) }));
+  });
+  ipcMain.handle('writing:frames', (e, opts) => db.getWritingFrames(opts || {}));
+  ipcMain.handle('writing:paraphraseBank', (e, limit) => db.getParaphraseBank(limit || 25));
 };

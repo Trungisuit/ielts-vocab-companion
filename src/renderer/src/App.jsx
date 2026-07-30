@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard.jsx';
 import Study from './pages/Study.jsx';
+import Writing from './pages/Writing.jsx';
 import Browse from './pages/Browse.jsx';
 import Settings from './pages/Settings.jsx';
 
 const NAV = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'study', icon: '🎓', label: 'Học ngay' },
+  { id: 'writing', icon: '✍️', label: 'Writing' },
   { id: 'browse', icon: '📚', label: 'Duyệt từ vựng' },
   { id: 'settings', icon: '⚙️', label: 'Cài đặt' }
 ];
@@ -50,6 +52,7 @@ export default function App() {
       <div className="main">
         {page === 'dashboard' && <Dashboard onGoStudy={() => setPage('study')} />}
         {page === 'study' && <Study onDone={refreshDue} />}
+        {page === 'writing' && <Writing onDone={refreshDue} />}
         {page === 'browse' && <Browse />}
         {page === 'settings' && <Settings />}
       </div>

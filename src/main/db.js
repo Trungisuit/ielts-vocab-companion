@@ -75,13 +75,22 @@ function init() {
     CREATE INDEX IF NOT EXISTS idx_cards_topic ON cards(topic);
     CREATE INDEX IF NOT EXISTS idx_reviews_time ON reviews(reviewed_at);
   `);
+  ensureColumn('cards', 'function', "TEXT DEFAULT ''");
   seedIfEmpty();
   syncNewSeeds(); // nap them the moi tu seed vao DB da ton tai (khong xoa tien do)
+  syncWritingFunctions(); // gan nhan chuc nang Writing cho the phrase
   // set ngay bat dau hoc lan dau tien
   if (!getSetting('startDate')) {
     setSetting('startDate', todayStr());
   }
   return db;
+}
+
+function ensureColumn(table, column, typeDef) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${typeDef}`);
+  }
 }
 
 function todayStr(d = new Date()) {
@@ -103,15 +112,22 @@ function seedIfEmpty() {
   const files = fs.readdirSync(seedDir).filter((f) => f.endsWith('.json'));
   const insert = db.prepare(`
     INSERT INTO cards (word, pos, ipa, cefr, vn, def, example, example_vn,
-      collocations, synonyms, topic, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      collocations, synonyms, topic, sort_order, function)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   let entries = [];
   for (const f of files) {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(seedDir, f), 'utf8'));
+      if (!data.cards || !data.cards.length) continue; // bo qua writing_frames.json
       const topic = data.topic || f.replace('.json', '');
-      for (const e of data.cards || []) entries.push({ ...e, topic });
+      for (const e of data.cards || []) {
+        entries.push({
+          ...e,
+          topic,
+          fn: e.fn || inferFunction(e.w || '', topic)
+        });
+      }
     } catch (err) {
       console.error('Seed file error', f, err.message);
     }
@@ -130,7 +146,7 @@ function seedIfEmpty() {
         e.w || '', e.pos || '', e.ipa || '', e.cefr || '',
         e.vn || '', e.def || '', e.ex || '', e.exVn || '',
         JSON.stringify(e.coll || []), JSON.stringify(e.syn || []),
-        e.topic, i
+        e.topic, i, e.fn || ''
       );
     });
     db.exec('COMMIT');
@@ -157,8 +173,8 @@ function syncNewSeeds() {
   let order = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM cards').get().m;
   const insert = db.prepare(`
     INSERT INTO cards (word, pos, ipa, cefr, vn, def, example, example_vn,
-      collocations, synonyms, topic, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      collocations, synonyms, topic, sort_order, function)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const files = fs.readdirSync(seedDir).filter((f) => f.endsWith('.json'));
   let added = 0;
@@ -172,16 +188,18 @@ function syncNewSeeds() {
         console.error('Seed file error', f, err.message);
         continue;
       }
+      if (!data.cards || !data.cards.length) continue;
       const topic = data.topic || f.replace('.json', '');
       for (const e of data.cards || []) {
         const w = (e.w || '').toLowerCase().trim();
         if (!w || existing.has(w)) continue;
         order += 1;
+        const fn = e.fn || inferFunction(e.w || '', topic);
         insert.run(
           e.w || '', e.pos || '', e.ipa || '', e.cefr || '',
           e.vn || '', e.def || '', e.ex || '', e.exVn || '',
           JSON.stringify(e.coll || []), JSON.stringify(e.syn || []),
-          topic, order
+          topic, order, fn
         );
         existing.add(w);
         added += 1;
@@ -194,6 +212,85 @@ function syncNewSeeds() {
     return;
   }
   if (added) console.log(`Synced ${added} new cards from seed`);
+}
+
+const WRITING_TOPICS = new Set(['writing_phrases', 'common_phrases', 'writing_task1']);
+
+/** Gan nhan chuc nang Writing (opinion/cause/contrast/solution/conclusion/task1) */
+function inferFunction(word, topic) {
+  if (topic === 'writing_task1') return 'task1';
+  if (!WRITING_TOPICS.has(topic) && topic !== 'writing_phrases' && topic !== 'common_phrases') {
+    return '';
+  }
+  const w = (word || '').toLowerCase();
+  if (/increase|decline|rise|fall|peak|fluctuat|stable|proportion|figure|overall|respectively|account for|make up|just under|just over|level off|halve|double|surpass|trend|stand at|narrow|widen|minority|majority|approximately|from \.\.\. to|twice as|three times|second highest|by far|similar pattern|experience growth|witness|plateau|it is clear/.test(w)) {
+    return 'task1';
+  }
+  if (/in conclusion|to sum up|in the long run|on the whole|by and large|in a nutshell|last but not least|overall/.test(w)) {
+    return 'conclusion';
+  }
+  if (/on the one hand|on the other hand|in contrast|by contrast|whereas|nevertheless|despite|albeit|at the expense|conversely|in spite/.test(w)) {
+    return 'contrast';
+  }
+  if (/result in|stem from|as a result|owing to|consequently|contribute to|give rise|pose a threat|exacerbate|hinder|undermine|on the grounds/.test(w)) {
+    return 'cause';
+  }
+  if (/take measures|address the issue|viable solution|deal with|cut down|give priority|strike a balance|implement|curb|mitigate|facilitate|foster|advocate|with a view|in order to|play a crucial|pave the way/.test(w)) {
+    return 'solution';
+  }
+  if (/believed|point of view|as far as|no doubt|no denying|goes without saying|furthermore|in terms of|when it comes|it could be argued|first and foremost|for instance|in other words|put simply|double-edged|case in point|bear in mind|to a certain/.test(w)) {
+    return 'opinion';
+  }
+  // mac dinh cho writing topics
+  if (WRITING_TOPICS.has(topic)) return 'opinion';
+  return '';
+}
+
+/**
+ * Cap nhat cot function cho the Writing (tu seed fn + suy luan),
+ * khong ghi de neu da co function dung.
+ */
+function syncWritingFunctions() {
+  const seedDir = path.join(__dirname, '..', '..', 'data', 'seed');
+  const fnByWord = new Map();
+  if (fs.existsSync(seedDir)) {
+    for (const f of fs.readdirSync(seedDir).filter((x) => x.endsWith('.json'))) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(seedDir, f), 'utf8'));
+        const topic = data.topic || f.replace('.json', '');
+        for (const e of data.cards || []) {
+          const key = (e.w || '').toLowerCase().trim();
+          if (!key) continue;
+          fnByWord.set(key, e.fn || inferFunction(e.w, topic));
+        }
+      } catch {}
+    }
+  }
+  const rows = db.prepare(`
+    SELECT id, word, topic, function FROM cards
+    WHERE topic IN ('writing_phrases','common_phrases','writing_task1')
+       OR function IS NULL OR function = ''
+  `).all();
+  const upd = db.prepare('UPDATE cards SET function = ? WHERE id = ?');
+  let n = 0;
+  db.exec('BEGIN');
+  try {
+    for (const r of rows) {
+      const key = (r.word || '').toLowerCase().trim();
+      let fn = fnByWord.get(key) || r.function || inferFunction(r.word, r.topic);
+      if (!fn && WRITING_TOPICS.has(r.topic)) fn = 'opinion';
+      if (fn && fn !== r.function) {
+        upd.run(fn, r.id);
+        n += 1;
+      }
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    console.error('syncWritingFunctions error', err.message);
+    return;
+  }
+  if (n) console.log(`Updated function tags on ${n} cards`);
 }
 
 /* ---------- Settings ---------- */
@@ -466,11 +563,126 @@ function getStats() {
   return { total, learned, mastered, due, reviewedToday, newToday, streak, daily, weekly };
 }
 
+/* ---------- Writing Lab ---------- */
+
+const WRITING_TOPIC_LIST = ['writing_phrases', 'common_phrases', 'writing_task1'];
+
+function listWritingCards({ function: fn = null, limit = 40, dueOnly = false } = {}) {
+  const now = Date.now();
+  const conds = [`topic IN (${WRITING_TOPIC_LIST.map(() => '?').join(',')})`];
+  const params = [...WRITING_TOPIC_LIST];
+  if (fn) {
+    conds.push('function = ?');
+    params.push(fn);
+  }
+  if (dueOnly) {
+    conds.push("state != 'new' AND due_at IS NOT NULL AND due_at <= ?");
+    params.push(now);
+  }
+  const where = 'WHERE ' + conds.join(' AND ');
+  // uu tien the den han, roi learning, roi new
+  const rows = db.prepare(`
+    SELECT * FROM cards ${where}
+    ORDER BY
+      CASE
+        WHEN state != 'new' AND due_at IS NOT NULL AND due_at <= ${now} THEN 0
+        WHEN state = 'learning' THEN 1
+        WHEN state = 'new' THEN 2
+        ELSE 3
+      END,
+      CASE WHEN due_at IS NULL THEN 1 ELSE 0 END,
+      due_at ASC,
+      sort_order ASC
+    LIMIT ?
+  `).all(...params, limit);
+  return rows.map(parseCard);
+}
+
+/** Mo khoa them the Writing (bo qua gioi han ngay), uu tien theo function */
+function introduceWritingCards(n = 10, fn = null) {
+  const now = Date.now();
+  const conds = [`topic IN (${WRITING_TOPIC_LIST.map(() => '?').join(',')})`, "state = 'new'"];
+  const params = [...WRITING_TOPIC_LIST];
+  if (fn) {
+    conds.push('function = ?');
+    params.push(fn);
+  }
+  params.push(n);
+  const rows = db.prepare(`
+    SELECT id FROM cards WHERE ${conds.join(' AND ')} ORDER BY sort_order ASC LIMIT ?
+  `).all(...params);
+  const upd = db.prepare(
+    "UPDATE cards SET state = 'learning', due_at = ?, introduced_at = ? WHERE id = ?"
+  );
+  for (const r of rows) upd.run(now, now, r.id);
+  return rows.length;
+}
+
+function getWritingFrames({ function: fn = null, limit = 30 } = {}) {
+  const seedPath = path.join(__dirname, '..', '..', 'data', 'seed', 'writing_frames.json');
+  if (!fs.existsSync(seedPath)) return [];
+  let frames = [];
+  try {
+    const data = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+    frames = data.frames || [];
+  } catch {
+    return [];
+  }
+  if (fn) frames = frames.filter((f) => f.function === fn);
+  // shuffle nhe
+  for (let i = frames.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [frames[i], frames[j]] = [frames[j], frames[i]];
+  }
+  return frames.slice(0, limit);
+}
+
+function getParaphraseBank(limit = 25) {
+  const rows = db.prepare(`
+    SELECT * FROM cards
+    WHERE topic IN (${WRITING_TOPIC_LIST.map(() => '?').join(',')})
+      AND example != '' AND synonyms != '[]'
+    ORDER BY RANDOM() LIMIT ?
+  `).all(...WRITING_TOPIC_LIST, limit);
+  return rows.map((r) => {
+    const card = parseCard(r);
+    return {
+      id: card.id,
+      word: card.word,
+      vn: card.vn,
+      original: card.example,
+      originalVn: card.example_vn,
+      targetPhrase: card.word,
+      synonyms: card.synonyms || [],
+      function: card.function || inferFunction(card.word, card.topic)
+    };
+  });
+}
+
+function getWritingStats() {
+  const total = db.prepare(`
+    SELECT COUNT(*) AS n FROM cards WHERE topic IN (${WRITING_TOPIC_LIST.map(() => '?').join(',')})
+  `).get(...WRITING_TOPIC_LIST).n;
+  const learned = db.prepare(`
+    SELECT COUNT(*) AS n FROM cards
+    WHERE topic IN (${WRITING_TOPIC_LIST.map(() => '?').join(',')}) AND state != 'new'
+  `).get(...WRITING_TOPIC_LIST).n;
+  const byFn = db.prepare(`
+    SELECT function AS fn, COUNT(*) AS total,
+      SUM(CASE WHEN state != 'new' THEN 1 ELSE 0 END) AS started
+    FROM cards
+    WHERE topic IN (${WRITING_TOPIC_LIST.map(() => '?').join(',')})
+    GROUP BY function
+  `).all(...WRITING_TOPIC_LIST);
+  return { total, learned, byFn };
+}
+
 module.exports = {
   init, todayStr,
   getSetting, getAllSettings, setSetting, setSettings,
   getCard, getDueCards, countDue, introduceNewCards, introduceMoreCards, ensureReviewAvailable,
   updateCardSrs, addReview, postponeCard,
   listCards, listTopics, addCard, updateCard, deleteCard, toggleStar, getDistractors,
-  setCardMedia, getStats, getDataDir
+  setCardMedia, getStats, getDataDir,
+  listWritingCards, introduceWritingCards, getWritingFrames, getParaphraseBank, getWritingStats
 };

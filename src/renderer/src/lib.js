@@ -69,8 +69,22 @@ export const TOPIC_LABELS = {
   communication_language: 'Giao tiếp & Ngôn ngữ',
   writing_phrases: 'Cụm từ Writing',
   common_phrases: 'Cụm từ thông dụng',
+  writing_task1: 'Writing Task 1',
   custom: 'Từ của tôi'
 };
+
+export const WRITING_FUNCTIONS = {
+  opinion: 'Quan điểm',
+  cause: 'Nguyên nhân – Kết quả',
+  contrast: 'Đối lập',
+  solution: 'Giải pháp',
+  conclusion: 'Kết luận',
+  task1: 'Task 1 (biểu đồ)'
+};
+
+export function functionLabel(fn) {
+  return WRITING_FUNCTIONS[fn] || fn || 'Khác';
+}
 
 export function topicLabel(t) {
   return TOPIC_LABELS[t] || t;
