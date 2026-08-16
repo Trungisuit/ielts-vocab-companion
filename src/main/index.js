@@ -1,10 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, screen, protocol, net, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, screen, protocol, net, nativeImage, ipcMain, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const db = require('./db');
 const srs = require('./srs');
 const scheduler = require('./scheduler');
 const registerIpc = require('./ipc');
+const apiServer = require('./api-server');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL || '';
 const IS_SMOKE = process.argv.includes('--smoke');
@@ -225,8 +226,12 @@ if (!gotLock) {
       snooze: (min) => {
         scheduler.snooze(min);
         hidePopup();
-      }
+      },
+      openExternal: (url) => shell.openExternal(url)
     });
+
+    // API Lab: REST + Swagger local (hoc API kieu banking qua tu vung)
+    apiServer.start().catch((err) => console.error('API Lab start failed', err));
 
     createMainWindow();
     createPopupWindow();
@@ -273,6 +278,7 @@ if (!gotLock) {
   app.on('before-quit', () => {
     isQuitting = true;
     scheduler.stop();
+    apiServer.stop();
   });
 
   // Khong thoat khi dong het cua so — app song o tray

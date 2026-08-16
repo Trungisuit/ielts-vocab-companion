@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('api', {
   getWritingFrames: (opts) => ipcRenderer.invoke('writing:frames', opts),
   getParaphraseBank: (limit) => ipcRenderer.invoke('writing:paraphraseBank', limit),
 
+  /* API Lab */
+  getApiLabInfo: () => ipcRenderer.invoke('apiLab:info'),
+  openApiDocs: () => ipcRenderer.invoke('apiLab:openDocs'),
+
   /* Media */
   getImage: (cardId) => ipcRenderer.invoke('media:image', cardId),
   getAudio: (cardId) => ipcRenderer.invoke('media:audio', cardId),

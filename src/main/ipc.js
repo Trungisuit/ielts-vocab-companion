@@ -5,6 +5,7 @@ const { ipcMain } = require('electron');
 const db = require('./db');
 const srs = require('./srs');
 const media = require('./media');
+const apiServer = require('./api-server');
 
 module.exports = function registerIpc(actions) {
   /* ----- Stats / Dashboard ----- */
@@ -111,4 +112,12 @@ module.exports = function registerIpc(actions) {
   });
   ipcMain.handle('writing:frames', (e, opts) => db.getWritingFrames(opts || {}));
   ipcMain.handle('writing:paraphraseBank', (e, limit) => db.getParaphraseBank(limit || 25));
+
+  /* ----- API Lab ----- */
+  ipcMain.handle('apiLab:info', () => apiServer.getInfo());
+  ipcMain.handle('apiLab:openDocs', () => {
+    const info = apiServer.getInfo();
+    if (info.docsUrl && actions.openExternal) actions.openExternal(info.docsUrl);
+    return info;
+  });
 };

@@ -456,15 +456,23 @@ function addCard(data) {
   const maxOrder = db.prepare('SELECT MAX(sort_order) AS m FROM cards').get().m || 0;
   const res = db.prepare(`
     INSERT INTO cards (word, pos, ipa, cefr, vn, def, example, example_vn,
-      collocations, synonyms, topic, custom, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      collocations, synonyms, topic, custom, sort_order, function)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).run(
     data.word || '', data.pos || '', data.ipa || '', data.cefr || 'B2',
     data.vn || '', data.def || '', data.example || '', data.example_vn || '',
     JSON.stringify(data.collocations || []), JSON.stringify(data.synonyms || []),
-    data.topic || 'custom', maxOrder + 1
+    data.topic || 'custom', maxOrder + 1, data.function || ''
   );
   return Number(res.lastInsertRowid);
+}
+
+function findCardByWord(word) {
+  if (!word) return null;
+  const row = db.prepare(
+    'SELECT * FROM cards WHERE LOWER(TRIM(word)) = LOWER(TRIM(?)) LIMIT 1'
+  ).get(word);
+  return parseCard(row);
 }
 
 function updateCard(id, data) {
@@ -683,6 +691,7 @@ module.exports = {
   getCard, getDueCards, countDue, introduceNewCards, introduceMoreCards, ensureReviewAvailable,
   updateCardSrs, addReview, postponeCard,
   listCards, listTopics, addCard, updateCard, deleteCard, toggleStar, getDistractors,
+  findCardByWord,
   setCardMedia, getStats, getDataDir,
   listWritingCards, introduceWritingCards, getWritingFrames, getParaphraseBank, getWritingStats
 };

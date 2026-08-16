@@ -342,3 +342,39 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .para-input:focus { outline: none; border-color: var(--accent); }
 .para-input.ok { border-color: var(--green); }
 .para-input.no { border-color: var(--red); }
+
+/* ===== API Lab ===== */
+.apilab-wrap { max-width: 900px; }
+.apilab-wrap h1 { margin: 8px 0 6px; font-size: 26px; }
+.apilab-wrap h3 { margin: 0 0 10px; font-size: 16px; }
+.apilab-wrap code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12.5px; background: var(--bg3); padding: 1px 6px; border-radius: 6px;
+}
+.apilab-status, .apilab-lesson, .apilab-try, .apilab-endpoints {
+  margin-bottom: 14px; padding: 16px 18px;
+}
+.apilab-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.apilab-lesson ul { margin: 0; padding-left: 18px; color: var(--text2); font-size: 14px; line-height: 1.65; }
+.apilab-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+.apilab-response {
+  margin-top: 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: #0a0c10; overflow: hidden;
+}
+.apilab-response.ok { border-color: var(--green); }
+.apilab-response.warn { border-color: var(--amber); }
+.apilab-response.err { border-color: var(--red); }
+.apilab-response-head {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; background: var(--bg3); font-size: 13px; color: var(--text2);
+}
+.apilab-response pre {
+  margin: 0; padding: 14px; max-height: 320px; overflow: auto;
+  font-size: 12.5px; line-height: 1.45; color: #c8d0dc; white-space: pre-wrap; word-break: break-word;
+}
+.apilab-card-preview {
+  padding: 14px 16px; border-top: 1px solid var(--border); background: var(--bg2);
+}
+.apilab-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.apilab-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.apilab-table td:first-child { width: 46%; }
