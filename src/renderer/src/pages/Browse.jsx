@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CardBack } from '../components/CardFace.jsx';
-import { playAudio, topicLabel } from '../lib.js';
+import { playAudio, topicLabel, cefrBandLabel, CEFR_SHORT_BAND } from '../lib.js';
 
 const EMPTY_FORM = {
   word: '', pos: 'noun', ipa: '', cefr: 'B2', vn: '', def: '',
@@ -10,6 +10,7 @@ const EMPTY_FORM = {
 export default function Browse() {
   const [topics, setTopics] = useState([]);
   const [topic, setTopic] = useState(null);
+  const [cefr, setCefr] = useState(null);
   const [search, setSearch] = useState('');
   const [cards, setCards] = useState([]);
   const [total, setTotal] = useState(0);
@@ -18,13 +19,13 @@ export default function Browse() {
 
   const loadTopics = () => window.api.listTopics().then(setTopics);
   const loadCards = async () => {
-    const res = await window.api.listCards({ topic, search, limit: 300 });
+    const res = await window.api.listCards({ topic, cefr, search, limit: 350 });
     setCards(res.cards);
     setTotal(res.total);
   };
 
   useEffect(() => { loadTopics(); }, []);
-  useEffect(() => { loadCards(); }, [topic, search]);
+  useEffect(() => { loadCards(); }, [topic, cefr, search]);
 
   const openAdd = () => setEditing({ ...EMPTY_FORM, id: null });
   const openEdit = (c) => setEditing({
@@ -59,7 +60,7 @@ export default function Browse() {
       <h1>Duyệt từ vựng</h1>
       <div className="sub">{total} thẻ · bấm vào từ để xem chi tiết</div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <input
           style={{ flex: 1, maxWidth: 380 }}
           placeholder="🔍 Tìm từ tiếng Anh hoặc nghĩa tiếng Việt..."
@@ -67,6 +68,17 @@ export default function Browse() {
           onChange={(e) => setSearch(e.target.value)}
         />
         <button className="btn primary" onClick={openAdd}>+ Thêm từ của tôi</button>
+      </div>
+
+      <div className="fn-filter" style={{ marginBottom: 14 }}>
+        <button className={'fn-chip' + (cefr === null ? ' active' : '')} onClick={() => setCefr(null)}>
+          Tất cả Band
+        </button>
+        {['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map((lv) => (
+          <button key={lv} className={'fn-chip' + (cefr === lv ? ' active' : '')} onClick={() => setCefr(lv)}>
+            {lv} · {CEFR_SHORT_BAND[lv]}
+          </button>
+        ))}
       </div>
 
       <div className="browse-layout">
@@ -93,7 +105,7 @@ export default function Browse() {
                 <span className={`state-dot state-${c.state}`} title={c.state} />
                 <span className="w">{c.word}</span>
                 <span className="v">{c.vn}</span>
-                <span className="chip">{c.cefr}</span>
+                <span className="chip">{cefrBandLabel(c.cefr)}</span>
                 {!!c.starred && <span>⭐</span>}
               </div>
               {expanded === c.id && (
@@ -143,9 +155,9 @@ export default function Browse() {
                 <input value={editing.ipa} onChange={(e) => setEditing({ ...editing, ipa: e.target.value })} />
               </div>
               <div className="form-row">
-                <label>Mức độ (CEFR)</label>
+                <label>Mức độ (CEFR / Band)</label>
                 <select value={editing.cefr} onChange={(e) => setEditing({ ...editing, cefr: e.target.value })}>
-                  {['A2', 'B1', 'B2', 'C1', 'C2'].map((c) => <option key={c}>{c}</option>)}
+                  {['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map((c) => <option key={c} value={c}>{cefrBandLabel(c)}</option>)}
                 </select>
               </div>
             </div>

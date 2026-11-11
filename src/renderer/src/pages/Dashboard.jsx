@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { CEFR_BAND_LABELS } from '../lib.js';
 
 export default function Dashboard({ onGoStudy }) {
   const [stats, setStats] = useState(null);
@@ -15,8 +16,8 @@ export default function Dashboard({ onGoStudy }) {
     ? Math.ceil((new Date(settings.examDate + 'T00:00:00') - new Date()) / 86400000)
     : null;
 
-  // canh bao tut tien do: so tu can hoc moi ngay de kip ky thi
-  const remainWords = stats.total - stats.learned;
+  // canh bao tut tien do: so tu can hoc moi ngay trong pham vi band muc tieu de kip ky thi
+  const remainWords = stats.targetRemaining ?? (stats.total - stats.learned);
   const neededPerDay = examDays && examDays > 30 && remainWords > 0
     ? Math.ceil(remainWords / (examDays - 30)) // chua 30 ngay cuoi de on tong
     : null;
@@ -74,6 +75,11 @@ export default function Dashboard({ onGoStudy }) {
       )}
 
       <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="chart-title">Lộ trình từ vựng theo Band IELTS (0 → 7.0+)</div>
+        <BandBreakdown byCefr={stats.byCefr || []} />
+      </div>
+
+      <div className="panel" style={{ marginBottom: 16 }}>
         <div className="chart-title">Tiến độ tích lũy từ vựng</div>
         <CumulativeChart weekly={stats.weekly} total={stats.total} />
       </div>
@@ -81,6 +87,31 @@ export default function Dashboard({ onGoStudy }) {
         <div className="chart-title">Lượt ôn tập 30 ngày gần nhất</div>
         <DailyBars daily={stats.daily} />
       </div>
+    </div>
+  );
+}
+
+/* Tien do theo tung tang CEFR / Band */
+function BandBreakdown({ byCefr }) {
+  const order = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+  const map = Object.fromEntries((byCefr || []).map((r) => [r.cefr, r]));
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+      {order.map((lv) => {
+        const row = map[lv] || { total: 0, learned: 0, mastered: 0 };
+        const pct = row.total > 0 ? Math.round((row.learned / row.total) * 100) : 0;
+        return (
+          <div key={lv} style={{ background: 'var(--bg3, #171b26)', padding: '10px 12px', borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+              <b>{lv} · {CEFR_BAND_LABELS[lv] || lv}</b>
+              <span style={{ color: 'var(--text2)' }}>{row.learned}/{row.total} ({pct}%)</span>
+            </div>
+            <div className="progress-line" style={{ margin: 0, height: 6 }}>
+              <div style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

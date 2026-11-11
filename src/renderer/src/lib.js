@@ -49,6 +49,16 @@ export function useCardImage(cardId) {
 }
 
 export const TOPIC_LABELS = {
+  basic_daily_life: 'Nền tảng: Sinh hoạt hằng ngày',
+  basic_home_family: 'Nền tảng: Nhà cửa & Gia đình',
+  basic_food_shopping: 'Nền tảng: Ẩm thực & Mua sắm',
+  basic_time_numbers: 'Nền tảng: Thời gian & Con số',
+  basic_weather_nature: 'Nền tảng: Thời tiết & Thiên nhiên',
+  basic_body_health: 'Nền tảng: Cơ thể & Sức khỏe',
+  basic_hobbies: 'Nền tảng: Sở thích & Giải trí',
+  basic_jobs_school: 'Nền tảng: Trường học & Công việc',
+  basic_places_directions: 'Nền tảng: Địa điểm & Chỉ đường',
+  basic_feelings_people: 'Nền tảng: Cảm xúc & Con người',
   education: 'Giáo dục',
   environment: 'Môi trường',
   technology: 'Công nghệ',
@@ -72,6 +82,28 @@ export const TOPIC_LABELS = {
   writing_task1: 'Writing Task 1',
   custom: 'Từ của tôi'
 };
+
+export const CEFR_BAND_LABELS = {
+  A1: 'Band 0–2.5 (Nền tảng)',
+  A2: 'Band 3.0–3.5 (Sơ cấp)',
+  B1: 'Band 4.0–5.0 (Cơ bản)',
+  B2: 'Band 5.5–6.5 (Trung cấp)',
+  C1: 'Band 7.0 (Mục tiêu)',
+  C2: 'Band 7.5+ (Nâng cao)'
+};
+
+export const CEFR_SHORT_BAND = {
+  A1: 'Band 0–2.5',
+  A2: 'Band 3.0–3.5',
+  B1: 'Band 4.0–5.0',
+  B2: 'Band 5.5–6.5',
+  C1: 'Band 7.0',
+  C2: 'Band 7.5+'
+};
+
+export function cefrBandLabel(cefr) {
+  return CEFR_SHORT_BAND[cefr] ? `${cefr} · ${CEFR_SHORT_BAND[cefr]}` : cefr || '';
+}
 
 export const WRITING_FUNCTIONS = {
   opinion: 'Quan điểm',

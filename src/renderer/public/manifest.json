@@ -1,0 +1,11 @@
+{
+  "name": "IELTS Vocab Companion",
+  "short_name": "IELTS Vocab",
+  "description": "Ứng dụng học từ vựng IELTS (Band 0 → 7.0+) với Spaced Repetition & Offline",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#6366f1",
+  "orientation": "portrait"
+}
+

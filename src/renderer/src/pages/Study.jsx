@@ -33,10 +33,17 @@ export default function Study({ onDone }) {
   useEffect(() => { load(); }, []);
 
   const card = queue && queue[0];
+  const ratingRef = useRef(false); // chong cham diem 2 lan khi bam phim nhanh
 
   const handleRated = useCallback(async (rating) => {
-    if (!card) return;
-    const res = await window.api.rateCard(card.id, rating);
+    if (!card || ratingRef.current) return;
+    ratingRef.current = true;
+    let res;
+    try {
+      res = await window.api.rateCard(card.id, rating);
+    } finally {
+      ratingRef.current = false;
+    }
     // Neu the van dang trong buoc hoc (Quen/Kho tren tu moi) -> luyen lai
     // trong cung phien (day xuong cuoi hang doi). Chi tinh "xong" khi tot nghiep.
     const stillLearning = res && res.state === 'learning';

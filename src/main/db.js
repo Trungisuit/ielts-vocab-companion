@@ -18,7 +18,10 @@ const DEFAULT_SETTINGS = {
   quietEnd: '08:00',
   dnd: false,
   examDate: null, // 'YYYY-MM-DD'
-  startDate: null // ngay bat dau hoc, tu dong set lan dau mo app
+  startDate: null, // ngay bat dau hoc, tu dong set lan dau mo app
+  currentBand: 0, // band IELTS hien tai (0 - 7.0) -> bo qua tu duoi trinh do
+  targetBand: 7, // band muc tieu -> khong mo khoa tu vuot trinh do
+  includeC2: true // giu toan bo bo tu (gom ca C2); tat di neu chi muon hoc den targetBand
 };
 
 function getDataDir() {
@@ -79,6 +82,8 @@ function init() {
   seedIfEmpty();
   syncNewSeeds(); // nap them the moi tu seed vao DB da ton tai (khong xoa tien do)
   syncWritingFunctions(); // gan nhan chuc nang Writing cho the phrase
+  dedupeCards(); // xoa the trung tu (chi xoa ban 'new', giu ban co tien do)
+  resetMediaTriedOnce(); // cho thu tai lai anh/audio tung that bai (co the do offline)
   // set ngay bat dau hoc lan dau tien
   if (!getSetting('startDate')) {
     setSetting('startDate', todayStr());
@@ -103,6 +108,55 @@ function todayStr(d = new Date()) {
 /* ---------- Seed ---------- */
 
 const CEFR_ORDER = { A1: 0, A2: 1, B1: 2, B2: 3, C1: 4, C2: 5 };
+const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+/* ---------- Band IELTS <-> CEFR ---------- */
+// A1 ~ band 0-2.5 · A2 ~ 3.0-3.5 · B1 ~ 4.0-5.0 · B2 ~ 5.5-6.5 · C1 ~ 7.0-8.0 · C2 ~ 8.5+
+
+/** Chi so CEFR (0=A1 .. 4=C1) ung voi mot band IELTS */
+function bandToCefrIndex(band) {
+  const b = Number(band) || 0;
+  if (b < 3) return 0;
+  if (b < 4) return 1;
+  if (b < 5.5) return 2;
+  if (b < 7) return 3;
+  return 4;
+}
+
+/** Khoang CEFR duoc phep mo khoa theo cai dat band hien tai / muc tieu */
+function cefrRange(settings) {
+  const max = settings.includeC2 ? 5 : bandToCefrIndex(settings.targetBand ?? 7);
+  const min = Math.min(bandToCefrIndex(settings.currentBand ?? 0), max);
+  return { min, max };
+}
+
+/**
+ * Dieu kien SQL chon the 'new' trong khoang band.
+ * The tu tao (custom) va the khong co CEFR chuan luon duoc phep.
+ */
+function bandFilterSql(settings, { ignoreMin = false } = {}) {
+  const { min, max } = cefrRange(settings);
+  const allowed = CEFR_LEVELS.slice(ignoreMin ? 0 : min, max + 1);
+  const all = CEFR_LEVELS.map((l) => `'${l}'`).join(',');
+  const list = allowed.map((l) => `'${l}'`).join(',');
+  return `(custom = 1 OR cefr NOT IN (${all}) OR cefr IN (${list}))`;
+}
+
+// Thu tu mo khoa: tu cua toi truoc, roi de -> kho theo CEFR, roi thu tu seed
+const NEW_CARD_ORDER = `
+  ORDER BY custom DESC,
+    CASE cefr WHEN 'A1' THEN 0 WHEN 'A2' THEN 1 WHEN 'B1' THEN 2
+      WHEN 'B2' THEN 3 WHEN 'C1' THEN 4 WHEN 'C2' THEN 5 ELSE 3 END,
+    sort_order ASC`;
+
+/** Chon toi da n id the 'new' theo lo trinh band */
+function pickNewCardIds(n, settings, opts) {
+  if (n <= 0) return [];
+  return db.prepare(`
+    SELECT id FROM cards WHERE state = 'new' AND ${bandFilterSql(settings, opts)}
+    ${NEW_CARD_ORDER} LIMIT ?
+  `).all(n).map((r) => r.id);
+}
 
 function seedIfEmpty() {
   const row = db.prepare('SELECT COUNT(*) AS n FROM cards').get();
@@ -116,12 +170,16 @@ function seedIfEmpty() {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   let entries = [];
+  const seen = new Set(); // cung 1 tu co the nam o nhieu file chu de -> chi nap 1 lan
   for (const f of files) {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(seedDir, f), 'utf8'));
       if (!data.cards || !data.cards.length) continue; // bo qua writing_frames.json
       const topic = data.topic || f.replace('.json', '');
       for (const e of data.cards || []) {
+        const key = (e.w || '').toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
         entries.push({
           ...e,
           topic,
@@ -293,6 +351,57 @@ function syncWritingFunctions() {
   if (n) console.log(`Updated function tags on ${n} cards`);
 }
 
+/**
+ * Xoa the trung tu (khong phan biet hoa/thuong): CHI xoa ban dang o trang thai 'new'
+ * va khong co lich su review, de khong bao gio mat tien do hoc.
+ */
+function dedupeCards() {
+  const dups = db.prepare(`
+    SELECT LOWER(TRIM(word)) AS w FROM cards GROUP BY w HAVING COUNT(*) > 1
+  `).all();
+  if (!dups.length) return;
+  const rowsByWord = db.prepare(`
+    SELECT id, state, reps, custom,
+      (SELECT COUNT(*) FROM reviews WHERE card_id = cards.id) AS rev_cnt
+    FROM cards WHERE LOWER(TRIM(word)) = ?
+    ORDER BY (state != 'new') DESC, rev_cnt DESC, custom DESC, id ASC
+  `);
+  const del = db.prepare('DELETE FROM cards WHERE id = ?');
+  let removed = 0;
+  db.exec('BEGIN');
+  try {
+    for (const { w } of dups) {
+      if (!w) continue;
+      const rows = rowsByWord.all(w);
+      // giu ban dau tien (uu tien ban da hoc / co review), xoa cac ban thua con 'new'
+      for (const r of rows.slice(1)) {
+        if (r.state === 'new' && r.rev_cnt === 0) {
+          del.run(r.id);
+          removed += 1;
+        }
+      }
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    console.error('dedupeCards error', err.message);
+  }
+  if (removed) console.log(`Removed ${removed} duplicate new cards`);
+}
+
+/**
+ * Mot lan duy nhat: reset image_tried/audio_tried cho cac the chua co file
+ * (truoc day khi offline van bi danh dau tried=1 vinh vien).
+ */
+function resetMediaTriedOnce() {
+  if (getSetting('mediaTriedResetV1')) return;
+  db.exec(`
+    UPDATE cards SET image_tried = 0 WHERE image_path IS NULL AND image_tried = 1;
+    UPDATE cards SET audio_tried = 0 WHERE audio_path IS NULL AND audio_tried = 1;
+  `);
+  setSetting('mediaTriedResetV1', true);
+}
+
 /* ---------- Settings ---------- */
 
 function getSetting(key) {
@@ -364,15 +473,17 @@ function introduceNewCards() {
   ).get(startOfDay).n;
   const remain = Math.max(0, settings.newPerDay - introducedToday);
   if (remain === 0) return 0;
+  return unlockCardIds(pickNewCardIds(remain, settings));
+}
+
+function unlockCardIds(ids) {
+  if (!ids.length) return 0;
   const now = Date.now();
-  const rows = db.prepare(
-    "SELECT id FROM cards WHERE state = 'new' ORDER BY sort_order ASC LIMIT ?"
-  ).all(remain);
   const upd = db.prepare(
     "UPDATE cards SET state = 'learning', due_at = ?, introduced_at = ? WHERE id = ?"
   );
-  for (const r of rows) upd.run(now, now, r.id);
-  return rows.length;
+  for (const id of ids) upd.run(now, now, id);
+  return ids.length;
 }
 
 /**
@@ -381,15 +492,15 @@ function introduceNewCards() {
  *  ma khong con the den han). Tra ve so the vua mo khoa.
  */
 function introduceMoreCards(n = 10) {
-  const now = Date.now();
-  const rows = db.prepare(
-    "SELECT id FROM cards WHERE state = 'new' ORDER BY sort_order ASC LIMIT ?"
-  ).all(n);
-  const upd = db.prepare(
-    "UPDATE cards SET state = 'learning', due_at = ?, introduced_at = ? WHERE id = ?"
-  );
-  for (const r of rows) upd.run(now, now, r.id);
-  return rows.length;
+  const settings = getAllSettings();
+  let ids = pickNewCardIds(n, settings);
+  // neu da het tu tu currentBand..targetBand thi lay not cac tu de hon con sot
+  if (ids.length < n) {
+    const more = pickNewCardIds(n - ids.length, settings, { ignoreMin: true })
+      .filter((id) => !ids.includes(id));
+    ids = [...ids, ...more];
+  }
+  return unlockCardIds(ids);
 }
 
 /**
@@ -408,10 +519,13 @@ function ensureReviewAvailable() {
 }
 
 function updateCardSrs(id, { state, ease, interval_days, reps, lapses, due_at }) {
+  // introduced_at: neu the duoc cham diem khi con 'new' (vd Paraphrase, API review)
+  // thi ghi nhan moc mo khoa de thong ke / bieu do tich luy khong bo sot
   db.prepare(`
-    UPDATE cards SET state = ?, ease = ?, interval_days = ?, reps = ?, lapses = ?, due_at = ?
+    UPDATE cards SET state = ?, ease = ?, interval_days = ?, reps = ?, lapses = ?, due_at = ?,
+      introduced_at = COALESCE(introduced_at, ?)
     WHERE id = ?
-  `).run(state, ease, interval_days, reps, lapses, due_at, id);
+  `).run(state, ease, interval_days, reps, lapses, due_at, Date.now(), id);
 }
 
 function addReview(cardId, rating, intervalDays) {
@@ -425,10 +539,11 @@ function postponeCard(id, minutes) {
     .run(Date.now() + minutes * 60000, id);
 }
 
-function listCards({ topic = null, search = '', state = null, starred = false, limit = 100, offset = 0 } = {}) {
+function listCards({ topic = null, cefr = null, search = '', state = null, starred = false, limit = 100, offset = 0 } = {}) {
   const conds = [];
   const params = [];
   if (topic) { conds.push('topic = ?'); params.push(topic); }
+  if (cefr) { conds.push('cefr = ?'); params.push(cefr); }
   if (state) { conds.push('state = ?'); params.push(state); }
   if (starred) { conds.push('starred = 1'); }
   if (search) {
@@ -436,9 +551,13 @@ function listCards({ topic = null, search = '', state = null, starred = false, l
     params.push(`%${search}%`, `%${search}%`);
   }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const rows = db.prepare(
-    `SELECT * FROM cards ${where} ORDER BY sort_order ASC LIMIT ? OFFSET ?`
-  ).all(...params, limit, offset);
+  const rows = db.prepare(`
+    SELECT * FROM cards ${where}
+    ORDER BY CASE cefr WHEN 'A1' THEN 0 WHEN 'A2' THEN 1 WHEN 'B1' THEN 2
+      WHEN 'B2' THEN 3 WHEN 'C1' THEN 4 WHEN 'C2' THEN 5 ELSE 3 END,
+      sort_order ASC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset);
   const total = db.prepare(`SELECT COUNT(*) AS n FROM cards ${where}`).get(...params).n;
   return { cards: rows.map(parseCard), total };
 }
@@ -478,17 +597,24 @@ function findCardByWord(word) {
 function updateCard(id, data) {
   db.prepare(`
     UPDATE cards SET word = ?, pos = ?, ipa = ?, cefr = ?, vn = ?, def = ?,
-      example = ?, example_vn = ?, collocations = ?, synonyms = ?, topic = ?
+      example = ?, example_vn = ?, collocations = ?, synonyms = ?, topic = ?,
+      function = COALESCE(?, function)
     WHERE id = ?
   `).run(
     data.word || '', data.pos || '', data.ipa || '', data.cefr || 'B2',
     data.vn || '', data.def || '', data.example || '', data.example_vn || '',
     JSON.stringify(data.collocations || []), JSON.stringify(data.synonyms || []),
-    data.topic || 'custom', id
+    data.topic || 'custom', data.function ?? null, id
   );
 }
 
 function deleteCard(id) {
+  // don file anh/audio da cache cua the
+  const row = db.prepare('SELECT image_path, audio_path FROM cards WHERE id = ?').get(id);
+  for (const p of [row?.image_path, row?.audio_path]) {
+    if (!p) continue;
+    try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
+  }
   db.prepare('DELETE FROM cards WHERE id = ?').run(id);
   db.prepare('DELETE FROM reviews WHERE card_id = ?').run(id);
 }
@@ -499,9 +625,14 @@ function toggleStar(id) {
 
 /** Lay n nghia tieng Viet nhieu (lam dap an sai cho trac nghiem) */
 function getDistractors(cardId, n = 3) {
+  // loai nghia trung voi dap an dung va trung lap giua cac dap an sai
   return db.prepare(`
-    SELECT vn FROM cards WHERE id != ? AND vn != '' ORDER BY RANDOM() LIMIT ?
-  `).all(cardId, n).map((r) => r.vn);
+    SELECT vn FROM (
+      SELECT DISTINCT vn FROM cards
+      WHERE id != ? AND vn != ''
+        AND LOWER(TRIM(vn)) != LOWER(TRIM(COALESCE((SELECT vn FROM cards WHERE id = ?), '')))
+    ) ORDER BY RANDOM() LIMIT ?
+  `).all(cardId, cardId, n).map((r) => r.vn);
 }
 
 function setCardMedia(id, { image_path, image_tried, audio_path, audio_tried }) {
@@ -513,6 +644,44 @@ function setCardMedia(id, { image_path, image_tried, audio_path, audio_tried }) 
     db.prepare('UPDATE cards SET audio_path = COALESCE(?, audio_path), audio_tried = COALESCE(?, audio_tried) WHERE id = ?')
       .run(audio_path ?? null, audio_tried ?? null, id);
   }
+}
+
+function getMediaCounts() {
+  const total = db.prepare('SELECT COUNT(*) AS n FROM cards').get().n;
+  const images = db.prepare("SELECT COUNT(*) AS n FROM cards WHERE image_path IS NOT NULL AND image_path != ''").get().n;
+  const audio = db.prepare("SELECT COUNT(*) AS n FROM cards WHERE audio_path IS NOT NULL AND audio_path != ''").get().n;
+  return { total, images, audio };
+}
+
+function getCardsMissingMediaIds() {
+  return db.prepare(`
+    SELECT id FROM cards
+    WHERE (image_path IS NULL AND image_tried = 0)
+       OR (audio_path IS NULL AND audio_tried = 0)
+    ORDER BY (state != 'new') DESC, sort_order ASC
+  `).all().map((r) => r.id);
+}
+
+/** Xuat toan bo snapshot DB (cards + reviews + settings + writing frames) de dong goi APK hoac backup */
+function exportSnapshot() {
+  const cards = db.prepare('SELECT * FROM cards ORDER BY id ASC').all().map(parseCard);
+  const reviews = db.prepare('SELECT * FROM reviews ORDER BY id ASC').all();
+  const settings = getAllSettings();
+  const seedPath = path.join(__dirname, '..', '..', 'data', 'seed', 'writing_frames.json');
+  let frames = [];
+  if (fs.existsSync(seedPath)) {
+    try {
+      frames = JSON.parse(fs.readFileSync(seedPath, 'utf8')).frames || [];
+    } catch {}
+  }
+  return {
+    exportedAt: Date.now(),
+    version: '1.1.0',
+    settings,
+    cards,
+    reviews,
+    frames
+  };
 }
 
 /* ---------- Stats / Dashboard ---------- */
@@ -568,7 +737,22 @@ function getStats() {
     GROUP BY d ORDER BY d
   `).all();
 
-  return { total, learned, mastered, due, reviewedToday, newToday, streak, daily, weekly };
+  // thong ke theo CEFR / band + so the con phai hoc trong pham vi muc tieu
+  const byCefr = db.prepare(`
+    SELECT cefr, COUNT(*) AS total,
+      SUM(CASE WHEN state != 'new' THEN 1 ELSE 0 END) AS learned,
+      SUM(CASE WHEN state = 'review' AND interval_days >= 21 THEN 1 ELSE 0 END) AS mastered
+    FROM cards GROUP BY cefr
+  `).all();
+  const settings = getAllSettings();
+  const targetRemaining = db.prepare(
+    `SELECT COUNT(*) AS n FROM cards WHERE state = 'new' AND ${bandFilterSql(settings)}`
+  ).get().n;
+
+  return {
+    total, learned, mastered, due, reviewedToday, newToday,
+    streak, daily, weekly, byCefr, targetRemaining
+  };
 }
 
 /* ---------- Writing Lab ---------- */
@@ -692,6 +876,6 @@ module.exports = {
   updateCardSrs, addReview, postponeCard,
   listCards, listTopics, addCard, updateCard, deleteCard, toggleStar, getDistractors,
   findCardByWord,
-  setCardMedia, getStats, getDataDir,
+  setCardMedia, getMediaCounts, getCardsMissingMediaIds, exportSnapshot, getStats, getDataDir,
   listWritingCards, introduceWritingCards, getWritingFrames, getParaphraseBank, getWritingStats
 };

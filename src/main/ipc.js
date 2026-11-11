@@ -1,11 +1,12 @@
 /**
  * Dang ky toan bo IPC handlers giua renderer va main process.
  */
-const { ipcMain } = require('electron');
+const { ipcMain, shell } = require('electron');
 const db = require('./db');
 const srs = require('./srs');
 const media = require('./media');
 const apiServer = require('./api-server');
+const apkBuilder = require('./apk-builder');
 
 module.exports = function registerIpc(actions) {
   /* ----- Stats / Dashboard ----- */
@@ -56,6 +57,18 @@ module.exports = function registerIpc(actions) {
   ipcMain.handle('media:audio', async (e, cardId) => {
     const p = await media.getAudio(cardId);
     return p ? `media://audio/${cardId}?t=${Date.now()}` : null;
+  });
+  ipcMain.handle('media:offlineStatus', () => media.getOfflineStatus());
+  ipcMain.handle('media:offlineStart', () => media.startOfflineDownload(4));
+  ipcMain.handle('media:offlineStop', () => media.stopOfflineDownload());
+
+  /* ----- Mobile / APK Packager ----- */
+  ipcMain.handle('mobile:status', () => apkBuilder.getBuildStatus());
+  ipcMain.handle('mobile:prepareBundle', () => apkBuilder.prepareMobileBundle());
+  ipcMain.handle('mobile:buildApk', () => apkBuilder.runScriptBuild());
+  ipcMain.handle('mobile:openReleaseDir', () => {
+    shell.openPath(apkBuilder.RELEASE_DIR);
+    return apkBuilder.RELEASE_DIR;
   });
 
   /* ----- Popup ----- */

@@ -1,5 +1,5 @@
 import React from 'react';
-import { playAudio, playSentence, useCardImage, topicLabel, highlightWord } from '../lib.js';
+import { playAudio, playSentence, useCardImage, topicLabel, cefrBandLabel, highlightWord } from '../lib.js';
 
 /** Mat truoc cua the: tu + IPA + anh */
 export function CardFront({ card, showImage = true }) {
@@ -60,7 +60,7 @@ export function CardBack({ card, compact = false, showImage = false }) {
 export function TopicTag({ topic, cefr }) {
   return (
     <span className="topic-tag chip">
-      {topicLabel(topic)}{cefr ? ` · ${cefr}` : ''}
+      {topicLabel(topic)}{cefr ? ` · ${cefrBandLabel(cefr)}` : ''}
     </span>
   );
 }

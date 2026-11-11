@@ -1,0 +1,55 @@
+name: Build Android APK (IELTS Vocab)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies & Capacitor Android
+        run: |
+          npm install
+          npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Export latest vocabulary snapshot & build web bundle
+        run: |
+          node scripts/export-mobile-bundle.js
+          npx vite build
+
+      - name: Sync Capacitor Android project & Build APK
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../IELTS-Vocab-latest.apk
+
+      - name: Upload IELTS-Vocab-latest.apk Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IELTS-Vocab-latest-apk
+          path: IELTS-Vocab-latest.apk
+

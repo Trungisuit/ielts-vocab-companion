@@ -378,3 +378,69 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .apilab-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .apilab-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .apilab-table td:first-child { width: 46%; }
+
+/* ===== Responsive cho Mobile / Android APK ===== */
+@media (max-width: 760px) {
+  .app {
+    flex-direction: column;
+    height: 100dvh;
+  }
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    padding: 6px 8px;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    order: 2;
+    background: var(--bg2);
+    gap: 2px;
+    overflow-x: auto;
+  }
+  .sidebar .logo {
+    display: none;
+  }
+  .nav-item {
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 8px;
+    font-size: 11px;
+    border-radius: 8px;
+    justify-content: center;
+    min-width: 56px;
+  }
+  .nav-item .badge {
+    margin-left: 0;
+  }
+  .main {
+    order: 1;
+    padding: 16px 14px 24px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .browse-layout {
+    grid-template-columns: 1fr;
+  }
+  .topic-list {
+    max-height: 180px;
+  }
+  .flashcard {
+    padding: 20px 14px;
+    min-height: 300px;
+  }
+  .word-big {
+    font-size: 26px;
+  }
+  .rating-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

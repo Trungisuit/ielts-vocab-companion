@@ -21,6 +21,7 @@ async function fetchJson(url, timeoutMs = 8000) {
       signal: ctrl.signal,
       headers: { 'User-Agent': 'IELTSVocabCompanion/1.0' }
     });
+    if (res.status === 404) return { _notFound: true };
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -73,7 +74,13 @@ async function getImage(cardId) {
     const q = encodeURIComponent(imageQuery(card));
     const url = `https://api.openverse.org/v1/images/?q=${q}&page_size=3&mature=false&fields=thumbnail,url`;
     const json = await fetchJson(url);
-    const results = (json && json.results) || [];
+    // Neu loi mang (json === null) -> KHONG danh dau image_tried de lan sau co mang thu lai
+    if (!json) return null;
+    const results = json.results || [];
+    if (results.length === 0) {
+      db.setCardMedia(cardId, { image_tried: 1 });
+      return null;
+    }
     for (const r of results) {
       const imgUrl = r.thumbnail || r.url;
       if (!imgUrl) continue;
@@ -83,7 +90,7 @@ async function getImage(cardId) {
         return dest;
       }
     }
-    db.setCardMedia(cardId, { image_tried: 1 });
+    // Co ket qua nhung tai file that bai (co the rot mang giua chung) -> cho thu lai sau
     return null;
   })();
   pendingImages.set(cardId, promise);
@@ -115,10 +122,18 @@ async function getAudio(cardId) {
     const json = await fetchJson(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
     );
+    // Loi mang -> khong set audio_tried de co mang thu lai
+    if (!json) return null;
+    if (json._notFound) {
+      db.setCardMedia(cardId, { audio_tried: 1 });
+      return null;
+    }
     const entries = Array.isArray(json) ? json : [];
+    let hasAudioUrl = false;
     for (const entry of entries) {
       for (const ph of entry.phonetics || []) {
         if (ph.audio) {
+          hasAudioUrl = true;
           const dest = path.join(cacheDir('audio'), `${cardId}.mp3`);
           if (await downloadFile(ph.audio, dest)) {
             db.setCardMedia(cardId, { audio_path: dest, audio_tried: 1 });
@@ -127,7 +142,7 @@ async function getAudio(cardId) {
         }
       }
     }
-    db.setCardMedia(cardId, { audio_tried: 1 });
+    if (!hasAudioUrl) db.setCardMedia(cardId, { audio_tried: 1 });
     return null;
   })();
   pendingAudio.set(cardId, promise);
@@ -135,4 +150,69 @@ async function getAudio(cardId) {
   return promise;
 }
 
-module.exports = { getImage, getAudio };
+/* ---------- Tai toan bo goi Offline (anh + audio) ---------- */
+
+let batchState = {
+  running: false,
+  total: 0,
+  done: 0,
+  imagesCached: 0,
+  audioCached: 0,
+  stopRequested: false
+};
+
+function getOfflineStatus() {
+  const counts = db.getMediaCounts();
+  return {
+    ...batchState,
+    totalCards: counts.total,
+    imagesCached: counts.images,
+    audioCached: counts.audio
+  };
+}
+
+function stopOfflineDownload() {
+  if (batchState.running) batchState.stopRequested = true;
+  return getOfflineStatus();
+}
+
+async function startOfflineDownload(concurrency = 4) {
+  if (batchState.running) return getOfflineStatus();
+  const ids = db.getCardsMissingMediaIds();
+  batchState = {
+    running: true,
+    total: ids.length,
+    done: 0,
+    imagesCached: 0,
+    audioCached: 0,
+    stopRequested: false
+  };
+
+  (async () => {
+    let idx = 0;
+    const worker = async () => {
+      while (!batchState.stopRequested && idx < ids.length) {
+        const cardId = ids[idx++];
+        try {
+          await getImage(cardId);
+          await getAudio(cardId);
+        } catch {}
+        batchState.done += 1;
+      }
+    };
+    const workers = Array.from({ length: Math.min(concurrency, ids.length || 1) }, () => worker());
+    await Promise.all(workers);
+    batchState.running = false;
+    batchState.stopRequested = false;
+  })();
+
+  return getOfflineStatus();
+}
+
+module.exports = {
+  getImage,
+  getAudio,
+  getOfflineStatus,
+  startOfflineDownload,
+  stopOfflineDownload
+};

@@ -87,27 +87,30 @@ function buildOpenApi(port) {
       description:
         'Local REST API để vừa học từ vựng IELTS vừa thực hành API kiểu banking.\n\n' +
         '**Banking analogy:** `POST /vocab` ≈ tạo hồ sơ / mở tài khoản rồi hệ thống **enrich** dữ liệu.\n\n' +
-        'Thử `POST` body `{ "word": "Competencies" }` — server trả flashcard đầy đủ (POS, IPA, VN, CEFR, example, ảnh…).'
+        'Thử `POST` body `{ "word": "Competencies" }` — server trả flashcard đầy đủ (POS, IPA, VN, CEFR, example, ảnh…).\n\n' +
+        'Sai chính tả (vd `inspirez`) → **400 WORD_NOT_FOUND**.'
     },
-    servers: [{ url: base, description: 'Local Electron API' }],
+    servers: [{ url: base, description: 'Local Electron API (127.0.0.1)' }],
     tags: [
-      { name: 'Vocab', description: 'CRUD từ vựng — giống resource banking' },
-      { name: 'Review', description: 'SRS rating — giống post transaction' },
-      { name: 'Meta', description: 'Health & docs' }
+      { name: 'vocab', description: 'Everything about vocabulary cards (CRUD + enrich)' },
+      { name: 'review', description: 'SRS review operations (like posting a transaction)' },
+      { name: 'meta', description: 'Health check and documentation' }
     ],
     paths: {
       '/health': {
         get: {
-          tags: ['Meta'],
+          tags: ['meta'],
           summary: 'Health check',
+          operationId: 'getHealth',
           responses: { '200': { description: 'OK' } }
         }
       },
       '/api/v1/vocab': {
         get: {
-          tags: ['Vocab'],
+          tags: ['vocab'],
           summary: 'List / search vocabulary',
           description: 'Giống list transactions / accounts với filter.',
+          operationId: 'listVocab',
           parameters: [
             { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Search word or Vietnamese' },
             { name: 'topic', in: 'query', schema: { type: 'string' } },
@@ -117,11 +120,13 @@ function buildOpenApi(port) {
           responses: { '200': { description: 'Paged list' } }
         },
         post: {
-          tags: ['Vocab'],
-          summary: 'Create + enrich a word (banking-style onboarding)',
+          tags: ['vocab'],
+          summary: 'Create + enrich a word',
           description:
-            'Chỉ cần gửi `word`. Server tự điền POS, IPA, định nghĩa, nghĩa Việt, example, CEFR, ảnh…\n\n' +
-            '**409** nếu từ đã tồn tại (idempotency / conflict).',
+            'Chỉ cần gửi `word`. Server kiểm tra từ điển; sai chính tả → **400 WORD_NOT_FOUND**.\n' +
+            'Hợp lệ → enrich POS, IPA, VN, CEFR, example, ảnh…\n\n' +
+            '**409** nếu từ đã tồn tại.',
+          operationId: 'createVocab',
           requestBody: {
             required: true,
             content: {
@@ -142,21 +147,24 @@ function buildOpenApi(port) {
           },
           responses: {
             '201': { description: 'Created & enriched' },
-            '400': { description: 'Validation error' },
+            '400': { description: 'Validation error hoặc WORD_NOT_FOUND' },
             '409': { description: 'Word already exists' }
           }
         }
       },
       '/api/v1/vocab/{id}': {
         get: {
-          tags: ['Vocab'],
-          summary: 'Get one card by id',
+          tags: ['vocab'],
+          summary: 'Find vocab card by ID',
+          operationId: 'getVocabById',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
           responses: { '200': { description: 'Card' }, '404': { description: 'Not found' } }
         },
         patch: {
-          tags: ['Vocab'],
-          summary: 'Partial update (như cập nhật KYC)',
+          tags: ['vocab'],
+          summary: 'Partial update vocab card',
+          description: 'Như cập nhật KYC một phần.',
+          operationId: 'updateVocab',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
           requestBody: {
             content: {
@@ -180,16 +188,19 @@ function buildOpenApi(port) {
           responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } }
         },
         delete: {
-          tags: ['Vocab'],
-          summary: 'Delete card',
+          tags: ['vocab'],
+          summary: 'Delete vocab card',
+          operationId: 'deleteVocab',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
           responses: { '204': { description: 'Deleted' }, '404': { description: 'Not found' } }
         }
       },
       '/api/v1/vocab/{id}/review': {
         post: {
-          tags: ['Review'],
-          summary: 'Rate card (SRS) — giống post a transaction',
+          tags: ['review'],
+          summary: 'Rate card (SRS)',
+          description: 'Giống post a transaction lên resource. rating: 1=Again 2=Hard 3=Good 4=Easy',
+          operationId: 'reviewVocab',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
           requestBody: {
             required: true,
@@ -199,7 +210,7 @@ function buildOpenApi(port) {
                   type: 'object',
                   required: ['rating'],
                   properties: {
-                    rating: { type: 'integer', minimum: 1, maximum: 4, description: '1=Again 2=Hard 3=Good 4=Easy', example: 3 }
+                    rating: { type: 'integer', minimum: 1, maximum: 4, example: 3 }
                   }
                 }
               }
@@ -214,30 +225,51 @@ function buildOpenApi(port) {
 
 function swaggerHtml(port) {
   const specUrl = `http://127.0.0.1:${port}/openapi.json`;
+  // Classic Swagger UI (Petstore-style): light theme, colored HTTP methods, StandaloneLayout
   return `<!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <title>IELTS Vocab API Lab — Swagger</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IELTS Vocab API Lab — Swagger UI</title>
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css">
+  <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.17.14/favicon-32x32.png" sizes="32x32">
   <style>
-    body { margin: 0; background: #0f1117; }
-    .topbar { display: none; }
-    .swagger-ui .info .title { color: #e8eaed; }
-    .swagger-ui .info p, .swagger-ui .info li { color: #b0b6c0; }
+    html { box-sizing: border-box; overflow-y: scroll; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { margin: 0; background: #fafafa; }
+    .swagger-ui .topbar { background-color: #1b1b1b; }
+    .swagger-ui .topbar .download-url-wrapper .select-label { color: #f0f0f0; }
+    .swagger-ui .info .title small.version-stamp { background-color: #89bf04; }
   </style>
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" charset="UTF-8"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
   <script>
-    window.ui = SwaggerUIBundle({
-      url: ${JSON.stringify(specUrl)},
-      dom_id: '#swagger-ui',
-      presets: [SwaggerUIBundle.presets.apis],
-      layout: 'BaseLayout',
-      tryItOutEnabled: true
-    });
+    window.onload = function () {
+      window.ui = SwaggerUIBundle({
+        url: ${JSON.stringify(specUrl)},
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: 'StandaloneLayout',
+        docExpansion: 'list',
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 1,
+        tryItOutEnabled: true,
+        filter: true,
+        displayRequestDuration: true,
+        persistAuthorization: false
+      });
+    };
   </script>
 </body>
 </html>`;
@@ -309,6 +341,17 @@ async function handle(req, res) {
             banking_analogy: '409 Conflict — resource đã tồn tại (idempotent create / trùng hồ sơ)'
           });
         }
+        if (err.status === 400) {
+          return sendJson(res, 400, {
+            error: err.code || 'VALIDATION_ERROR',
+            message: err.message,
+            hint: err.hint || undefined,
+            banking_analogy:
+              err.code === 'WORD_NOT_FOUND'
+                ? '400 — dữ liệu đầu vào không hợp lệ, bị chặn ở bước validate / KYC (sai chính tả = reject)'
+                : '400 — validation failed'
+          });
+        }
         throw err;
       }
     }
@@ -364,7 +407,8 @@ async function handle(req, res) {
           example_vn: body.example_vn ?? card.example_vn,
           collocations: body.collocations ?? card.collocations,
           synonyms: body.synonyms ?? card.synonyms,
-          topic: body.topic ?? card.topic
+          topic: body.topic ?? card.topic,
+          function: body.function ?? card.function
         };
         db.updateCard(id, next);
         return sendJson(res, 200, {
@@ -430,6 +474,7 @@ function start(port = DEFAULT_PORT) {
       }
       reject(err);
     });
+    // chi bind loopback — khong expose API (co DELETE, CORS *) ra mang LAN
     server.listen(port, '127.0.0.1', () => {
       listeningPort = port;
       console.log(`[API Lab] http://127.0.0.1:${port}/docs`);

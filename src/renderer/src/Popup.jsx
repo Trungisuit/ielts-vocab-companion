@@ -16,6 +16,7 @@ export default function Popup() {
   const [secondsLeft, setSecondsLeft] = useState(20);
   const [engaged, setEngaged] = useState(false); // da tuong tac -> khong tu an nua
   const reviewedRef = useRef(0);
+  const ratingRef = useRef(false);
 
   /* nhan the tu main process */
   useEffect(() => {
@@ -48,8 +49,15 @@ export default function Popup() {
   const flip = () => { engage(); setFlipped(true); };
 
   const rate = useCallback(async (rating) => {
+    if (ratingRef.current) return; // chong cham diem 2 lan khi bam phim nhanh
+    ratingRef.current = true;
     engage();
-    const res = await window.api.popupRate(card.id, rating);
+    let res;
+    try {
+      res = await window.api.popupRate(card.id, rating);
+    } finally {
+      ratingRef.current = false;
+    }
     reviewedRef.current += 1;
     // on toi da 5 the moi lan popup de khong chiem qua nhieu thoi gian
     if (res.card && reviewedRef.current < 5) {

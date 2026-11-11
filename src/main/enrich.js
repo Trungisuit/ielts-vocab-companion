@@ -110,6 +110,7 @@ async function lookupDictionary(word) {
 /**
  * Lam giau 1 tu → object san sang de addCard.
  * opts: { word, topic?, vn?, cefr?, skipImage? }
+ * Neu tu khong co trong dictionary (va khong nam glossary banking) → 400 WORD_NOT_FOUND.
  */
 async function enrichWord(opts) {
   const raw = String(opts.word || '').trim();
@@ -119,17 +120,40 @@ async function enrichWord(opts) {
     err.code = 'VALIDATION_ERROR';
     throw err;
   }
+  // chi cho phep chu cai / khoang / gach / apostrophe (tranh spam)
+  if (!/^[a-zA-Z][a-zA-Z\s\-']{0,79}$/.test(raw)) {
+    const err = new Error('Field "word" must be an English word or short phrase (letters only)');
+    err.status = 400;
+    err.code = 'VALIDATION_ERROR';
+    throw err;
+  }
+
   const word = raw.replace(/\s+/g, ' ');
   const key = word.toLowerCase();
   const gloss = BANKING_GLOSSARY[key] || {};
 
-  const dict = await lookupDictionary(key.includes(' ') ? key.split(/\s+/)[0] : key);
+  // Lookup: full phrase truoc, roi head word (cho cum ngan)
+  let dict = await lookupDictionary(key);
+  if (!dict && key.includes(' ')) {
+    dict = await lookupDictionary(key.split(/\s+/)[0]);
+  }
+
+  // Sai chinh ta / tu khong ton tai: khong tao the fake
+  if (!dict && !gloss.vn) {
+    const err = new Error(
+      `Word "${word}" was not found in the English dictionary. Check spelling (e.g. "inspire", not "inspirez").`
+    );
+    err.status = 400;
+    err.code = 'WORD_NOT_FOUND';
+    err.hint = 'Fix the spelling and POST again. Banking analogy: invalid input rejected at validation / KYC check.';
+    throw err;
+  }
 
   let vn = opts.vn || gloss.vn || '';
   let def = dict?.def || '';
   let example = dict?.example || '';
   let exampleVn = '';
-  let pos = dict?.pos || (key.endsWith('ies') || key.endsWith('s') ? 'noun' : '');
+  let pos = dict?.pos || '';
   let ipa = dict?.ipa || '';
   let synonyms = dict?.synonyms || [];
   const topic = opts.topic || gloss.topic || 'custom';
@@ -146,7 +170,6 @@ async function enrichWord(opts) {
 
   const collocations = [];
   if (gloss.vn) {
-    // banking: goi y collocation don gian
     collocations.push(`core ${key}`, `develop ${key}`);
   }
 
@@ -169,10 +192,14 @@ async function enrichWord(opts) {
 
 /**
  * Enrich + luu DB + tai anh/audio. Tra ve card day du.
- * Neu tu da ton tai → throw 409.
+ * Thu tu: validate tu dien (400) → check trung (409) → save.
  */
 async function enrichAndSave(opts) {
-  const existing = db.findCardByWord(opts.word);
+  // 1) Enrich/validate TRUOC — sai chinh ta → 400, khong bi 409 do lan POST cu
+  const enriched = await enrichWord(opts);
+
+  // 2) Trung tu hop le → 409
+  const existing = db.findCardByWord(enriched.word);
   if (existing) {
     const err = new Error(`Word already exists (id=${existing.id})`);
     err.status = 409;
@@ -181,7 +208,6 @@ async function enrichAndSave(opts) {
     throw err;
   }
 
-  const enriched = await enrichWord(opts);
   const { _audioUrl, ...data } = enriched;
   const id = db.addCard(data);
 

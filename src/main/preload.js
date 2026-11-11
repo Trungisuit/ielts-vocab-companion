@@ -37,6 +37,15 @@ contextBridge.exposeInMainWorld('api', {
   /* Media */
   getImage: (cardId) => ipcRenderer.invoke('media:image', cardId),
   getAudio: (cardId) => ipcRenderer.invoke('media:audio', cardId),
+  getOfflineStatus: () => ipcRenderer.invoke('media:offlineStatus'),
+  startOfflineDownload: () => ipcRenderer.invoke('media:offlineStart'),
+  stopOfflineDownload: () => ipcRenderer.invoke('media:offlineStop'),
+
+  /* Mobile / APK */
+  getMobileBuildStatus: () => ipcRenderer.invoke('mobile:status'),
+  prepareMobileBundle: () => ipcRenderer.invoke('mobile:prepareBundle'),
+  buildMobileApk: () => ipcRenderer.invoke('mobile:buildApk'),
+  openReleaseDir: () => ipcRenderer.invoke('mobile:openReleaseDir'),
 
   /* Popup */
   onPopupCard: (cb) => {

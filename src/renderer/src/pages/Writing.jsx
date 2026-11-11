@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardFront, CardBack, TopicTag } from '../components/CardFace.jsx';
 import { RatingRow } from './Study.jsx';
 import { WRITING_FUNCTIONS, functionLabel, playSentence } from '../lib.js';
@@ -100,10 +100,17 @@ function PhrasesMode({ onBack, onDone }) {
   useEffect(() => { load(fn); }, [fn]);
 
   const card = queue && queue[0];
+  const ratingRef = useRef(false); // chong cham diem 2 lan khi bam phim nhanh
 
   const handleRated = useCallback(async (rating) => {
-    if (!card) return;
-    const res = await window.api.rateCard(card.id, rating);
+    if (!card || ratingRef.current) return;
+    ratingRef.current = true;
+    let res;
+    try {
+      res = await window.api.rateCard(card.id, rating);
+    } finally {
+      ratingRef.current = false;
+    }
     const stillLearning = res && res.state === 'learning';
     setQueue((q) => {
       const rest = q.slice(1);
@@ -114,6 +121,17 @@ function PhrasesMode({ onBack, onDone }) {
     setFlipped(false);
     onDone && onDone();
   }, [card, onDone]);
+
+  /* phim tat: Space = hien nghia, 1-4 = cham diem */
+  useEffect(() => {
+    if (!card) return;
+    const onKey = (e) => {
+      if (e.code === 'Space') { e.preventDefault(); setFlipped(true); }
+      if (flipped && ['1', '2', '3', '4'].includes(e.key)) handleRated(Number(e.key));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [card, flipped, handleRated]);
 
   const learnMore = async () => {
     const cards = await window.api.learnMoreWriting(10, fn || null);
@@ -330,12 +348,14 @@ function ParaphraseMode({ onBack, onDone }) {
   const [queue, setQueue] = useState(null);
   const [value, setValue] = useState('');
   const [checked, setChecked] = useState(null); // null | true | false
+  const [copied, setCopied] = useState(false); // chep lai nguyen cau goc
   const [doneCount, setDoneCount] = useState(0);
 
   const load = async () => {
     setQueue(null);
     setValue('');
     setChecked(null);
+    setCopied(false);
     const bank = await window.api.getParaphraseBank(25);
     setQueue(bank);
     setDoneCount(0);
@@ -350,9 +370,12 @@ function ParaphraseMode({ onBack, onDone }) {
     const ans = normalize(value);
     const target = normalize(item.targetPhrase);
     const syns = (item.synonyms || []).map(normalize);
+    // cau goc da chua san cum muc tieu -> chep lai nguyen van khong tinh la paraphrase
+    const isCopy = ans === normalize(item.original);
     const ok = ans.includes(target) || syns.some((s) => s && ans.includes(s));
+    setCopied(isCopy);
     // cung chap nhan neu cau co giong goc nhung da doi bang syn (do dai hop ly)
-    setChecked(ok && ans.length >= Math.min(12, target.length));
+    setChecked(!isCopy && ok && ans.length >= Math.min(12, target.length));
   };
 
   const next = async (rating) => {
@@ -362,6 +385,7 @@ function ParaphraseMode({ onBack, onDone }) {
     }
     setValue('');
     setChecked(null);
+    setCopied(false);
     setQueue((q) => q.slice(1));
     setDoneCount((d) => d + 1);
   };
@@ -426,7 +450,9 @@ function ParaphraseMode({ onBack, onDone }) {
             <div className={checked ? 'ok-text' : 'no-text'}>
               {checked
                 ? '✓ Tốt! Bạn đã dùng cụm mục tiêu / đồng nghĩa.'
-                : `✗ Hãy đưa cụm "${item.targetPhrase}" (hoặc đồng nghĩa) vào câu.`}
+                : copied
+                  ? '✗ Bạn đang chép lại nguyên câu gốc — hãy diễn đạt lại theo cách khác.'
+                  : `✗ Hãy đưa cụm "${item.targetPhrase}" (hoặc đồng nghĩa) vào câu.`}
             </div>
             <div className="rating-row" style={{ width: '100%', marginTop: 8 }}>
               <button className="btn" onClick={() => next(checked ? 3 : 1)}>
